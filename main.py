@@ -143,10 +143,11 @@ def main():
         
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
-                raw_text, metadata = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                get_vector_store(text_chunks, metadata)
+                raw_text, metadata = get_pdf_text(pdf_docs)  # Get both text and metadata
+                text_chunks, chunk_metadata = get_text_chunks(raw_text, metadata)  # Pass both text and metadata
+                get_vector_store(text_chunks, chunk_metadata)  # Pass chunk_metadata along with text_chunks
                 st.success("Done, now it is ready to answer your question!")
+
 
 if __name__ == "__main__":
     main()
