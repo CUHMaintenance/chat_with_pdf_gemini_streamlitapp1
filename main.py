@@ -8,6 +8,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from threading import Lock
 import os
 from dotenv import load_dotenv
 
@@ -21,39 +23,54 @@ genai.configure(api_key=api_key)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Read PDFs loaded and get all text from all pages in one text (context)
-def get_pdf_text(pdf_docs):
+# Thread-safe FAISS Handler
+class SafeFAISS:
+    def __init__(self):
+        self.lock = Lock()
+        self.vector_store = None
+
+    def load_index(self, embeddings):
+        with self.lock:
+            try:
+                self.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+            except:
+                self.vector_store = FAISS.from_texts([], embedding=embeddings)
+
+    def query(self, user_question, k=5):
+        with self.lock:
+            return self.vector_store.similarity_search(user_question, k=k)
+
+    def add_texts(self, chunks, metadata, embeddings):
+        with self.lock:
+            self.vector_store.add_texts(chunks, metadata, embedding=embeddings)
+
+    def save_index(self):
+        with self.lock:
+            self.vector_store.save_local("faiss_index")
+
+
+# Thread-safe FAISS handler instance
+faiss_handler = SafeFAISS()
+
+# PDF Text Extraction (Parallelized)
+def extract_text_from_pdf(pdf):
+    pdf_reader = PdfReader(pdf)
     text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
+    for page in pdf_reader.pages:
+        text += page.extract_text()
     return text
 
-def get_text_chunks(text):
+def get_pdf_text(pdf_docs):
+    with ThreadPoolExecutor() as executor:
+        results = executor.map(extract_text_from_pdf, pdf_docs)
+    return "".join(results)
+
+# Text Chunking (Parallelized)
+def get_text_chunks_parallel(text):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-    chunks = text_splitter.split_text(text)
-    return chunks
+    return text_splitter.split_text(text)
 
-# FAISS with metadata
-def update_vector_store(text_chunks, pdf_names):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    
-    try:
-        # Load existing FAISS index
-        vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-    except:
-        # If no existing index, create a new one
-        vector_store = FAISS.from_texts([], embedding=embeddings)
-    
-    # Add new text chunks with metadata
-    metadata = [{"source": pdf_name} for pdf_name in pdf_names]
-    vector_store.add_texts(text_chunks, metadata)
-    
-    # Save the updated FAISS index
-    vector_store.save_local("faiss_index")
-
-# Conversational Chain
+# Conversational Chain Setup
 def get_conversational_chain():
     prompt_template = """
     Answer the question as detailed as possible from the provided context, make sure to provide all the details and you answer the question based on the context provided and not hallucinate.
@@ -69,30 +86,51 @@ def get_conversational_chain():
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-# Handle User Input and Responses
+# Update FAISS Index (Multiprocessing)
+def add_chunk_to_vector_store(chunk, pdf_name, embeddings):
+    metadata = {"source": pdf_name}
+    return chunk, metadata
+
+def update_vector_store_parallel(text_chunks, pdf_names):
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    faiss_handler.load_index(embeddings)
+
+    # Prepare metadata for each chunk
+    with ProcessPoolExecutor() as executor:
+        tasks = [
+            executor.submit(add_chunk_to_vector_store, chunk, pdf_name, embeddings)
+            for chunk, pdf_name in zip(text_chunks, pdf_names)
+        ]
+
+        # Collect results and update FAISS index
+        for task in tasks:
+            chunk, metadata = task.result()
+            faiss_handler.add_texts([chunk], [metadata], embeddings)
+
+    # Save the updated FAISS index
+    faiss_handler.save_index()
+
+# Query User Input and Generate Response
 def user_input(user_question):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
-    # Load the FAISS index
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    # Ensure FAISS index is loaded
+    if faiss_handler.vector_store is None:
+        faiss_handler.load_index(embeddings)
 
-    # Perform a similarity search and retrieve top 5 most relevant chunks
-    docs = new_db.similarity_search(user_question, k=5)  # Retrieve top 5 chunks
-    
-    # Combine the text of the retrieved chunks
-    retrieved_docs = []
-    for doc in docs:
-        source_info = doc.metadata.get("source", "Unknown Source")
-        retrieved_docs.append(f"From {source_info}: {doc.page_content}")
+    # Perform a thread-safe query
+    docs = faiss_handler.query(user_question, k=5)
+
+    # Combine retrieved chunks with metadata
+    retrieved_docs = [
+        f"From {doc.metadata.get('source', 'Unknown Source')}: {doc.page_content}"
+        for doc in docs
+    ]
     combined_context = "\n".join(retrieved_docs)
 
-    # Pass combined context to the conversational chain
+    # Generate a response using the conversational chain
     chain = get_conversational_chain()
-
-    response = chain(
-        {"context": combined_context, "question": user_question},  # Use combined context
-        return_only_outputs=True
-    )
+    response = chain({"context": combined_context, "question": user_question}, return_only_outputs=True)
 
     # Display and store user input and assistant response
     st.chat_message("user").markdown(user_question)
@@ -104,7 +142,7 @@ def user_input(user_question):
 
     st.session_state.messages.append({"role": "assistant", "content": assistant_response})
 
-# Main App Flow
+# Main Application
 def main():
     st.set_page_config("Chat with PDF")
     st.header("Chat with PDFs using Gemini")
@@ -127,12 +165,12 @@ def main():
             with st.spinner("Processing..."):
                 # Process new PDFs
                 raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                
-                # Dynamically update FAISS index
+                text_chunks = get_text_chunks_parallel(raw_text)
+
+                # Update FAISS index in parallel
                 pdf_names = [pdf.name for pdf in pdf_docs]
-                update_vector_store(text_chunks, pdf_names)
-                
+                update_vector_store_parallel(text_chunks, pdf_names)
+
                 st.success("Done, now it is ready to answer your question!")
 
 print("ALL GOOD")
