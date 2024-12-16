@@ -104,12 +104,12 @@ def main():
             st.markdown(message["content"])
 
     # Display the input box below the conversation
-    user_question = st.text_input("Ask a question to answer from the PDF files", key="input_box")
+    user_question = st.chat_input("Ask a question to answer from the PDF files", key="input_box")
     
-    # Send button with arrow icon for sending the message
-    if st.button("Send ➡️", use_container_width=True):
-        if user_question:
-            user_input(user_question)
+    # # Send button with arrow icon for sending the message
+    # if st.button("Send ➡️", use_container_width=True):
+    #     if user_question:
+    #         user_input(user_question)
 
     with st.sidebar:
         st.title("Upload your PDFs")
