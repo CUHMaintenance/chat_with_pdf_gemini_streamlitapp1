@@ -89,7 +89,7 @@ def main():
 
     with st.sidebar:
         st.title("Upload your PDFs")
-        pdf_docs = st.file_uploader("Upload the PDF files you want answers to your questions from and click on the Submit & Process Button. If you do not have any PDFs in mind, download PDF from Google Cloud on MLOps from the link and ask question like 'What is Experimentation?' - https://services.google.com/fh/files/misc/practitioners_guide_to_mlops_whitepaper.pdf",
+        pdf_docs = st.file_uploader("Upload the PDF files",
         accept_multiple_files=True)
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
