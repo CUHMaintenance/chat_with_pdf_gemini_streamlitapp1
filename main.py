@@ -98,10 +98,18 @@ def main():
     st.set_page_config("Chat with PDF")
     st.header("Chat with PDFs using Gemini")
 
-    user_question = st.text_input("Ask a question to answer from the PDF files")
+    # Display the conversation history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    if user_question:
-        user_input(user_question)
+    # Display the input box below the conversation
+    user_question = st.text_input("Ask a question to answer from the PDF files", key="input_box")
+    
+    # Send button with arrow icon for sending the message
+    if st.button("Send ➡️", use_container_width=True):
+        if user_question:
+            user_input(user_question)
 
     with st.sidebar:
         st.title("Upload your PDFs")
