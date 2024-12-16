@@ -11,9 +11,15 @@ from langchain.prompts import PromptTemplate
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-os.getenv("GOOGLE_API_KEY")
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# load_dotenv()
+# os.getenv("GOOGLE_API_KEY")
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# Access the API key from Streamlit secrets
+api_key = st.secrets['gapi']
+
+# Configure Google Generative AI with the API key
+genai.configure(api_key=api_key)
 
 
 # Read PDFs loaded and get all text from all pages in one text (context)
