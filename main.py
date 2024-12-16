@@ -7,7 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 import os
 from dotenv import load_dotenv
@@ -87,26 +87,19 @@ def get_conversational_chain():
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-# Function to add a chunk to the FAISS vector store
-def add_chunk_to_vector_store(chunk, pdf_name):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    metadata = {"source": pdf_name}
-    return chunk, metadata, embeddings.embed_text(chunk)
-
 # Update the FAISS vector store in parallel
 def update_vector_store_parallel(text_chunks, pdf_names):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     faiss_handler.load_index(embeddings)
 
-    with ProcessPoolExecutor() as executor:
+    with ThreadPoolExecutor() as executor:
         tasks = [
-            executor.submit(add_chunk_to_vector_store, chunk, pdf_names[0])  # Use first PDF name for simplicity
+            executor.submit(lambda chunk: faiss_handler.add_texts([chunk], [{"source": pdf_names[0]}], embeddings), chunk)
             for chunk in text_chunks
         ]
 
         for task in tasks:
-            chunk, metadata, embedding = task.result()
-            faiss_handler.add_texts([chunk], [metadata], embeddings)
+            task.result()  # Ensure all tasks complete
 
     # Save the updated FAISS index
     faiss_handler.save_index()
@@ -178,7 +171,6 @@ print("ALL GOOD")
 
 if __name__ == "__main__":
     main()
-
 
 # import streamlit as st
 # from PyPDF2 import PdfReader
