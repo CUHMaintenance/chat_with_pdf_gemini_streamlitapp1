@@ -108,8 +108,8 @@ def main():
     
     # # Send button with arrow icon for sending the message
     # if st.button("Send ➡️", use_container_width=True):
-    #     if user_question:
-    #         user_input(user_question)
+    if user_question:
+        user_input(user_question)
 
     with st.sidebar:
         st.title("Upload your PDFs")
