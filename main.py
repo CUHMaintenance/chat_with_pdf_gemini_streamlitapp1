@@ -11,10 +11,6 @@ from langchain.prompts import PromptTemplate
 import os
 from dotenv import load_dotenv
 
-# load_dotenv()
-# os.getenv("GOOGLE_API_KEY")
-# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
 # Access the API key from Streamlit secrets
 api_key = st.secrets['gapi']
 
@@ -26,10 +22,10 @@ genai.configure(api_key=api_key)
 def get_pdf_text(pdf_docs):
     text=""
     for pdf in pdf_docs:
-        pdf_reader= PdfReader(pdf)
+        pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
-            text+= page.extract_text()
-    return  text
+            text += page.extract_text()
+    return text
 
 
 def get_text_chunks(text):
@@ -40,7 +36,7 @@ def get_text_chunks(text):
 
 # FAISS
 def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model = "models/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
     vector_store.save_local("faiss_index")
 
@@ -57,31 +53,30 @@ def get_conversational_chain():
     Answer:
     """
 
+    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
 
-    model = ChatGoogleGenerativeAI(model="gemini-pro",
-                             temperature=0.3)
-
-    prompt = PromptTemplate(template = prompt_template, input_variables = ["context", "question"])
+    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
 
     return chain
 
 
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model = "models/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
-    new_db = FAISS.load_local("faiss_index", embeddings,allow_dangerous_deserialization=True)
+    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
     docs = new_db.similarity_search(user_question)
 
     chain = get_conversational_chain()
-   
-    response = chain(
-        {"input_documents":docs, "question": user_question}
-        , return_only_outputs=True)
 
-    print(response)
-    st.write("Answer: ", response["output_text"])
+    response = chain(
+        {"input_documents": docs, "question": user_question},
+        return_only_outputs=True
+    )
+
+    st.chat_message("user").markdown(user_question)
+    st.chat_message("assistant").markdown(response["output_text"])
 
 
 def main():
@@ -95,8 +90,7 @@ def main():
 
     with st.sidebar:
         st.title("Upload your PDFs")
-        pdf_docs = st.file_uploader("Upload the PDF files",
-        accept_multiple_files=True)
+        pdf_docs = st.file_uploader("Upload the PDF files", accept_multiple_files=True)
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
                 raw_text = get_pdf_text(pdf_docs)
