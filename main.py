@@ -23,7 +23,6 @@ genai.configure(api_key=api_key)
 # Initialize session state if not already initialized
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 # Read PDFs loaded and get all text from all pages in one text (context)
 def get_pdf_text(pdf_docs):
     text = ""
@@ -32,25 +31,37 @@ def get_pdf_text(pdf_docs):
         try:
             pdf_reader = PdfReader(pdf)
             for page_num, page in enumerate(pdf_reader.pages):
-                text += page.extract_text()
-                metadata.append({"source": pdf.name, "page_number": page_num})
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text
+                    # Store metadata per page
+                    metadata.append({"source": pdf.name, "page_number": page_num})
         except Exception as e:
             st.error(f"Error reading {pdf.name}: {e}")
     return text, metadata
 
 
-def get_text_chunks(text):
+def get_text_chunks(text, metadata):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
     chunks = text_splitter.split_text(text)
-    return chunks
+    
+    # Ensure each chunk has corresponding metadata
+    chunk_metadata = []
+    for i, chunk in enumerate(chunks):
+        chunk_metadata.append(metadata[i % len(metadata)])  # Cycle metadata if necessary (but ideally should align correctly)
+    
+    return chunks, chunk_metadata
 
 
 # FAISS
 def get_vector_store(text_chunks, metadata):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    # Ensure text chunks and metadata are of the same length
+    if len(text_chunks) != len(metadata):
+        raise ValueError(f"Texts and metadata must be of the same length. Got {len(text_chunks)} texts and {len(metadata)} metadata.")
+    
     vector_store = FAISS.from_texts(text_chunks, embedding=embeddings, metadatas=metadata)
     vector_store.save_local("faiss_index")
-
 
 def get_conversational_chain():
     prompt_template = """
