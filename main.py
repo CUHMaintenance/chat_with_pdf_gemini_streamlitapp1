@@ -7,8 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from threading import Lock
 import os
 from dotenv import load_dotenv
@@ -48,11 +47,11 @@ class SafeFAISS:
         with self.lock:
             self.vector_store.save_local("faiss_index")
 
-
 # Thread-safe FAISS handler instance
 faiss_handler = SafeFAISS()
 
-# PDF Text Extraction (Parallelized)
+# PDF Text Extraction
+# Extract text from a single PDF
 def extract_text_from_pdf(pdf):
     pdf_reader = PdfReader(pdf)
     text = ""
@@ -60,12 +59,14 @@ def extract_text_from_pdf(pdf):
         text += page.extract_text()
     return text
 
+# Combine text extraction from multiple PDFs
 def get_pdf_text(pdf_docs):
-    with ThreadPoolExecutor() as executor:
-        results = executor.map(extract_text_from_pdf, pdf_docs)
-    return "".join(results)
+    text = ""
+    for pdf in pdf_docs:
+        text += extract_text_from_pdf(pdf)
+    return text
 
-# Text Chunking (Parallelized)
+# Text Chunking
 def get_text_chunks_parallel(text):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
     return text_splitter.split_text(text)
@@ -86,25 +87,25 @@ def get_conversational_chain():
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-# Update FAISS Index (Multiprocessing)
-def add_chunk_to_vector_store(chunk, pdf_name, embeddings):
+# Function to add a chunk to the FAISS vector store
+def add_chunk_to_vector_store(chunk, pdf_name):
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     metadata = {"source": pdf_name}
-    return chunk, metadata
+    return chunk, metadata, embeddings.embed_text(chunk)
 
+# Update the FAISS vector store in parallel
 def update_vector_store_parallel(text_chunks, pdf_names):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     faiss_handler.load_index(embeddings)
 
-    # Prepare metadata for each chunk
     with ProcessPoolExecutor() as executor:
         tasks = [
-            executor.submit(add_chunk_to_vector_store, chunk, pdf_name, embeddings)
-            for chunk, pdf_name in zip(text_chunks, pdf_names)
+            executor.submit(add_chunk_to_vector_store, chunk, pdf_names[0])  # Use first PDF name for simplicity
+            for chunk in text_chunks
         ]
 
-        # Collect results and update FAISS index
         for task in tasks:
-            chunk, metadata = task.result()
+            chunk, metadata, embedding = task.result()
             faiss_handler.add_texts([chunk], [metadata], embeddings)
 
     # Save the updated FAISS index
@@ -177,6 +178,7 @@ print("ALL GOOD")
 
 if __name__ == "__main__":
     main()
+
 
 # import streamlit as st
 # from PyPDF2 import PdfReader
