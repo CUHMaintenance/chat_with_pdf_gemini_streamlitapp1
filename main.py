@@ -17,10 +17,13 @@ api_key = st.secrets['gapi']
 # Configure Google Generative AI with the API key
 genai.configure(api_key=api_key)
 
+# Initialize session state if not already initialized
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # Read PDFs loaded and get all text from all pages in one text (context)
 def get_pdf_text(pdf_docs):
-    text=""
+    text = ""
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
@@ -42,7 +45,6 @@ def get_vector_store(text_chunks):
 
 
 def get_conversational_chain():
-
     prompt_template = """
     Answer the question as detailed as possible from the provided context, make sure to provide all the details and you answer the question based on the context provided and not hallucinate.
     If the answer is not found in the provided context or if the context does not have enough information for you to answer the question, inform that the relevant context was not available in the given context and add 'it seems the relevant information is not available in uploaded PDFs to answer your question, please ask a question related to the contents of the PDFs uploaded.'
@@ -75,8 +77,21 @@ def user_input(user_question):
         return_only_outputs=True
     )
 
+    # Display user question
     st.chat_message("user").markdown(user_question)
-    st.chat_message("assistant").markdown(response["output_text"])
+    
+    # Add user question to the chat history
+    st.session_state.messages.append({"role": "user", "content": user_question})
+
+    # Generate assistant response
+    assistant_response = response["output_text"]
+    
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        st.markdown(assistant_response)
+    
+    # Add assistant response to the chat history
+    st.session_state.messages.append({"role": "assistant", "content": assistant_response})
 
 
 def main():
