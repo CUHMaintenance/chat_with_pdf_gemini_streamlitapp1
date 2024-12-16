@@ -103,11 +103,9 @@ def main():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Display the input box below the conversation
-    user_question = st.chat_input("Ask a question to answer from the PDF files", key="input_box")
-    
-    # # Send button with arrow icon for sending the message
-    # if st.button("Send ➡️", use_container_width=True):
+    # Use st.chat_input to capture user input
+    user_question = st.chat_input("Ask a question to answer from the PDF files")
+
     if user_question:
         user_input(user_question)
 
