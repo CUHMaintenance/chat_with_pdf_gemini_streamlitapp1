@@ -238,7 +238,7 @@ def get_text_chunks(text, metadata):
 
 # FAISS
 def get_vector_store(text_chunks, metadata):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-004")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     # Ensure text chunks and metadata are of the same length
     if len(text_chunks) != len(metadata):
         raise ValueError(f"Texts and metadata must be of the same length. Got {len(text_chunks)} texts and {len(metadata)} metadata.")
