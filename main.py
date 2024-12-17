@@ -132,6 +132,14 @@ def main():
     st.set_page_config("Chat with PDF")
     st.header("Chat with PDFs using Gemini")
 
+    # Download and process PDFs as soon as the app opens
+    with st.spinner("Processing..."):
+        pdf_docs = download_pdfs_from_url("https://www.gov.ie/en/collection/d9729-technical-guidance-documents/")
+        raw_text, metadata = get_pdf_text(pdf_docs)  # Get both text and metadata
+        text_chunks, chunk_metadata = get_text_chunks(raw_text, metadata)  # Pass both text and metadata
+        get_vector_store(text_chunks, chunk_metadata)  # Pass chunk_metadata along with text_chunks
+        st.success("Done, now it is ready to answer your question!")
+
     # Display the conversation history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -155,20 +163,9 @@ def main():
             Ensure your question aligns with the content of the PDFs.
             """
         )
-        
-        if st.button("Submit & Process"):
-            with st.spinner("Processing..."):
-                # Download PDFs from the provided URL
-                pdf_docs = download_pdfs_from_url("https://www.gov.ie/en/collection/d9729-technical-guidance-documents/")
-                raw_text, metadata = get_pdf_text(pdf_docs)  # Get both text and metadata
-                text_chunks, chunk_metadata = get_text_chunks(raw_text, metadata)  # Pass both text and metadata
-                get_vector_store(text_chunks, chunk_metadata)  # Pass chunk_metadata along with text_chunks
-                st.success("Done, now it is ready to answer your question!")
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
