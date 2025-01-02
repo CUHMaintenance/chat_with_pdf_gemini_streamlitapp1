@@ -1,13 +1,4 @@
 streamlit
-google-generativeai
+google
+google.genai
 python-dotenv
-langchain
-langchain_google_genai
-langchain-community
-beautifulsoup4
-
-chromadb==0.3.26
-
-pydantic
-faiss-cpu
-PyPDF2
